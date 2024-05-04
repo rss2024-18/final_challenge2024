@@ -27,13 +27,14 @@ class SignDetector(Node):
         image = self.bridge.imgmsg_to_cv2(img_msg, "bgr8")
 
         stop_image, stop_bb = StopSignDetector.predict(image)
-        redlight = self.stoplight_detector(image, stop_bb)
+        redlight, redlight_c = self.stoplight_detector(image, stop_bb)
 
         
     
 
     def stoplight_detector(self, image, stop_bb = None):
         hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        redlight = False
 
         #threshold image (red is both at the very bottom of hue and very top)
         lower_red = (0, 100, 100)
@@ -76,19 +77,21 @@ class SignDetector(Node):
                         continue 
                 #if red circle has been found that is the traffic light
                 if radius > self.light_rad: 
-                    return center
+                    redlight = True
+                    return redlight, center
                 
                 #if no red cirle found return the largest red object
                 if area > biggest:
+                    redlight = True
                     center_x = x + w // 2
                     center_y = y + h // 2  
 
                     biggest = area
                     biggest_x = center_x
                     biggest_y = center_y
-            return biggest_x, biggest_y
+            return redlight, (biggest_x, biggest_y)
            #nothing red found return none 
-        return None, None
+        return redlight, (None, None)
 
 
 def main(args=None):
