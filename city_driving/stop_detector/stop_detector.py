@@ -7,12 +7,14 @@ from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 from sensor_msgs.msg import Image
 from detector import StopSignDetector
+from geometry_msgs.msg import PointStamped, Point
 
 class SignDetector(Node):
     def __init__(self):
         super().__init__("stop_detector")
         self.detector = StopSignDetector()
-        self.publisher = None #TODO
+        self.stop_sign_pub = self.create_publisher(Point, "/stop_sign")
+        self.stop_light_pub = self.create_publisher(Point, "/stop_light")
         self.subscriber = self.create_subscription(Image, "/zed/zed_node/rgb/image_rect_color", self.callback, 1)
         self.bridge = CvBridge()
 
@@ -28,6 +30,23 @@ class SignDetector(Node):
 
         stop_image, stop_bb = StopSignDetector.predict(image)
         redlight, redlight_c = self.stoplight_detector(image, stop_bb)
+
+        light = Point()
+        if redlight:
+            light.x_pos = redlight_c[1]
+            light.y_pos = redlight_c[2]
+
+        stop = Point()
+        if stop_image:
+            x, y, w, h = stop_bb
+            center_x = x + w // 2
+            center_y = y + h // 2
+            stop.x_pos = center_x
+            stop.y_pos = center_y
+
+        self.stop_light_pub.publish(light)
+        self.stop_sign_pub.publish(stop)
+
 
         
     
