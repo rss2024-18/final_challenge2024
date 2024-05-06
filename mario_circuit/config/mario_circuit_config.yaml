@@ -1,0 +1,17 @@
+lane_segmentation:
+  ros__parameters:
+    image_topic: "/zed/zed_node/rgb/image_rect_color"
+    debug_topic: "/debug"
+    pixel_topic: "/pixel"
+    lookahead_pixel_height: 0
+homography_transformer:
+  ros__parameters:
+    pixel_topic: "/pixel"
+    marker_topic: "/marker"
+    goal_topic: "/goal"
+goal_follower:
+  ros__parameters:
+    goal_topic: "/goal"
+    drive_topic: "/vesc/input/navigation"
+    speed: 1.0
+    wheelbase_length: 0.3

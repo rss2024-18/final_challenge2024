@@ -1,0 +1,15 @@
+<launch>
+    <node pkg="safety_controller" name="safety_controller" exec="safety_controller" output="screen"></node>
+
+    <node pkg="mario_circuit" exec="lane_segmentation" name="lane_segmentation" output="screen">
+        <param from="$(find-pkg-share mario_circuit)/config/mario_circuit_config.yaml"/>
+    </node>
+    <node pkg="mario_circuit" exec="homography_transformer" name="homography_transformer" output="screen">
+        <param from="$(find-pkg-share mario_circuit)/config/mario_circuit_config.yaml"/>
+    </node>
+    <node pkg="mario_circuit" exec="goal_follower" name="goal_follower" output="screen">
+        <param from="$(find-pkg-share mario_circuit)/config/mario_circuit_config.yaml"/>
+    </node>
+    
+    <node pkg="image_transport" name="republish" exec="republish" args="raw in:=/cone_debug_img out:=/cone_debug_img_compressed" output="screen"></node>
+</launch>
