@@ -24,7 +24,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'path_builder = luigi_castle.path_builder:main'
+            'path_builder = luigi_castle.path_builder:main',
+            'path_follower = luigi_castle.path_follower:main'
         ],
     },
 )

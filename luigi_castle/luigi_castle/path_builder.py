@@ -28,6 +28,8 @@ class PathPlan(Node):
         self.get_logger().info(str(self.map_topic))
         self.get_logger().info(str(self.initial_pose_topic))
 
+        
+
         self.map_sub = self.create_subscription(
             OccupancyGrid,
             self.map_topic,
@@ -92,9 +94,6 @@ class PathPlan(Node):
             self.get_logger().info(str(self.start))
             if self.map is not None and self.start is not None:
                 self.get_logger().info("path time BITCH")
-                # stops_msg = Int32MultiArray()
-                # stops_msg.data = self.stops
-                # self.index_pub.publish(stops_msg)
                 path = self.plan_path(self.start, self.stops[0], self.stops[1], self.stops[2], self.map)
                 self.get_logger().info(str(self.trajectory.points))
             
@@ -113,11 +112,13 @@ class PathPlan(Node):
         self.get_logger().info(str(path0))
         path1 = self.map.a_star(self.stops[0], self.stops[1])
         self.get_logger().info(str(path1))
+        self.get_logger().info(str(self.stops[1]))
+        self.get_logger().info(str(self.stops[2]))
         path2 = self.map.a_star(self.stops[1], self.stops[2])
         self.get_logger().info(str(path2))
 
         # TODO: how make stop at stops?
-        path = path0 + path1 + path2
+        path = path0 + path1[1:] + path2[1:]
         
         
         # add to trajectory

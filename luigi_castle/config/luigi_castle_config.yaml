@@ -3,3 +3,7 @@ path_builder:
     odom_topic: "/odom"
     map_topic: "/map"
     initial_pose_topic: "/initialpose"
+path_follower:
+  ros__parameters:
+    odom_topic: "/odom"
+    drive_topic: "/drive"

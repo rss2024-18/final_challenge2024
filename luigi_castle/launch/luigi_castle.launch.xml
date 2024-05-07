@@ -4,5 +4,8 @@
     <node pkg="luigi_castle" exec="path_builder" name="path_builder" output="screen">
         <param from="$(find-pkg-share luigi_castle)/config/luigi_castle_config.yaml"/>
     </node>
+    <node pkg="luigi_castle" exec="path_follower" name="path_follower" output="screen">
+        <param from="$(find-pkg-share luigi_castle)/config/luigi_castle_config.yaml"/>
+    </node>
     
 </launch>
