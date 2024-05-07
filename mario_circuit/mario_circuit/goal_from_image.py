@@ -22,7 +22,7 @@ def image_print(img):
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
 
-def cd_color_segmentation(img, height = 600, width = 800, template = None):
+def cd_color_segmentation(img, height = 360, width = 640, template = None):
     """
     Implement the cone detection using color segmentation algorithm
     Input:
@@ -34,16 +34,16 @@ def cd_color_segmentation(img, height = 600, width = 800, template = None):
     
     ########## YOUR CODE STARTS HERE ##########
 	
-    height_of_interest = int(height * .625)
-    width_low = int(width*.125)
-    width_high = int(width*.875)
+    height_of_interest = int(height * .65) # .625
+    width_low = 0 # int(width*.125)
+    width_high = width-1 # int(width*.875)
     w = 25
-    kernel_size = 15
-    threshold = 210
+    kernel_size = 3
+    threshold = 190
     mask = cv2.inRange(img, np.array([threshold, threshold, threshold]), np.array([255, 255, 255]))
     result = cv2.bitwise_and(img, img, mask=mask)
     kernel = np.ones((kernel_size, kernel_size))
-    kernel2 = np.ones((39, 39))
+    kernel2 = np.ones((25, 25))
     img_threshold = cv2.morphologyEx(result, cv2.MORPH_OPEN, kernel)
     img_thick = cv2.dilate(img_threshold, kernel2)
     _, thresholded = cv2.threshold(img_thick, threshold, 255, cv2.THRESH_BINARY)
@@ -59,7 +59,8 @@ def cd_color_segmentation(img, height = 600, width = 800, template = None):
     # Uncomment this line for debugging
     # image_print(img_thick)
     # image_print(img)
-    return (average_x, height_of_interest)
+        return (average_x, height_of_interest, thresholded)
+    return thresholded
 	    
 if __name__ == "__main__":
     # code in this block will only be run when you explicitly run your script,

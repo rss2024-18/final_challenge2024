@@ -10,7 +10,7 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Point
 
-from goal_from_image import cd_color_segmentation
+from .goal_from_image import cd_color_segmentation
 
 class LaneSegmentation(Node):
     """
@@ -48,18 +48,23 @@ class LaneSegmentation(Node):
 
     def image_callback(self, image_msg):
         image = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
+        # self.get_logger().info(str(image.shape))
 
         goal_pixel = cd_color_segmentation(image)
-        if goal_pixel is not None:
+        if type(goal_pixel) is tuple:
             output_point = Point()
-            output_point.x = goal_pixel[0]
-            output_point.y = goal_pixel[1]
+            output_point.x = goal_pixel[0] + 0.0
+            output_point.y = goal_pixel[1] + 0.0
             self.pixel_pub.publish(output_point)
         
             # For debugging: visualize detection
-            debug_image = image.copy()
-            cv2.circle(debug_image, goal_pixel, 5, (0, 0, 255), -1)
+            debug_image = goal_pixel[2].copy()
+            cv2.circle(debug_image, (goal_pixel[0], goal_pixel[1]), 5, (0, 0, 255), -1)
             debug_msg = self.bridge.cv2_to_imgmsg(debug_image, "bgr8")
+            self.debug_pub.publish(debug_msg)
+        
+        else:
+            debug_msg = self.bridge.cv2_to_imgmsg(goal_pixel, "bgr8")
             self.debug_pub.publish(debug_msg)
 
 def main(args=None):
