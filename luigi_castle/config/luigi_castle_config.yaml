@@ -1,0 +1,5 @@
+path_builder:
+  ros__parameters:
+    odom_topic: "/odom"
+    map_topic: "/map"
+    initial_pose_topic: "/initialpose"

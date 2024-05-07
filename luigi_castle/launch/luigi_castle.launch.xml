@@ -1,0 +1,8 @@
+<launch>
+    <!-- <node pkg="safety_controller" name="safety_controller" exec="safety_controller" output="screen"></node> -->
+
+    <node pkg="luigi_castle" exec="path_builder" name="path_builder" output="screen">
+        <param from="$(find-pkg-share luigi_castle)/config/luigi_castle_config.yaml"/>
+    </node>
+    
+</launch>
