@@ -6,6 +6,7 @@
   - `/zed/zed_node/rgb/image_rect_color` for camera view
   - `/debug` for debug view (shows goal pixel and `thresholded` from goal_from_image.py)
     - change return value in `cd_color_segmentation` to debug different intermediate variables
+
 TODO:
 - send drive commands on separate timer (to prevent stuttering issues below 10 Hz)
 - debug controller / teleop / safety controller issues (was spotty on Monday)
