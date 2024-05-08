@@ -19,10 +19,12 @@ class PurePursuit(Node):
     def __init__(self):
         super().__init__("path_follower")
         self.declare_parameter('odom_topic', "default")
+        self.declare_parameter('drive_filter_topic', "default")
         self.declare_parameter('drive_topic', "default")
 
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         self.drive_topic = self.get_parameter('drive_topic').get_parameter_value().string_value
+        self.drive_filter_topic = self.get_parameter('drive_filter_topic').get_parameter_value().string_value
 
         self.lookahead = 2.5  # FILL IN #
         self.speed = 0.6  # FILL IN #
@@ -40,6 +42,9 @@ class PurePursuit(Node):
                                                  1)
         self.drive_pub = self.create_publisher(AckermannDriveStamped,
                                                self.drive_topic,
+                                               1)
+        self.drive_filter_pub = self.create_publisher(AckermannDriveStamped,
+                                               self.drive_filter_topic,
                                                1)
         self.debug_pub = self.create_publisher(PointStamped,
                                                "/debug/target",
@@ -64,7 +69,6 @@ class PurePursuit(Node):
         ends = trajectory_points[1:]
         vectors = ends - starts
         normalized = np.divide(vectors, (np.hypot(vectors[:,0], vectors[:,1]).reshape(-1,1)))
-        print("NORMALIED: " + str(normalized))
         parallel_start = np.multiply(starts-robot_point, normalized).sum(axis=1)
         parallel_end = np.multiply(robot_point-ends, normalized).sum(axis=1)
         clamped = np.maximum.reduce([parallel_start, parallel_end, np.zeros(len(parallel_start))])
@@ -72,7 +76,6 @@ class PurePursuit(Node):
         perpendicular = start_vectors[:,0] * normalized[:,1] - start_vectors[:,1] * normalized[:,0]
         distances = np.hypot(clamped, perpendicular)
 
-        print("DISTANCES:  "+ str(distances))
         closest_segment_index = np.argmin(distances)
         print(str(closest_segment_index))
         
@@ -80,25 +83,18 @@ class PurePursuit(Node):
         ## https://codereview.stackexchange.com/a/86428
         found = False
         target = None
-        print("ROBOT: " + str(robot_point))
         for i in range(closest_segment_index, len(starts)):
             P1 = starts[i]
-            print("P1: " + str(P1))
             V = vectors[i]
             a = np.dot(V, V)
             b = 2 * np.dot(V, P1 - robot_point)
             c = np.dot(P1, P1) + np.dot(robot_point, robot_point) - 2*np.dot(P1, robot_point) - self.lookahead**2
             disc = b**2 - 4*a*c
-            # self.get_logger().info(str(P1))
-            # self.get_logger().info(str(V))
-            # self.get_logger().info(str(robot_point))
-            # self.get_logger().info(str(disc))
             if disc < 0:
                 continue
             sqrt_disc = np.sqrt(disc)
             t1 = (-1*b + sqrt_disc) / (2*a)
             t2 = (-1*b - sqrt_disc) / (2*a)
-            print("t1: " + str(t1))
             # self.get_logger().info(str(t1) + " " + str(t2))
             if not (0 <= t1 <= 1): ## or 0 <= t2 <= 1
                 continue
@@ -114,7 +110,7 @@ class PurePursuit(Node):
             command.header.stamp = self.get_clock().now().to_msg()
             command.drive.steering_angle = 0.0
             command.drive.speed = 0.0
-            self.drive_pub.publish(command)
+            self.drive_filter_pub.publish(command)
             raise Exception("can't find target point")
         
         # visualize target
@@ -154,7 +150,7 @@ class PurePursuit(Node):
         command.header.stamp = self.get_clock().now().to_msg()
         command.drive.steering_angle = -delta
         command.drive.speed = self.speed
-        self.drive_pub.publish(command)
+        self.drive_filter_pub.publish(command)
 
 
     def trajectory_callback(self, msg):
