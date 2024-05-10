@@ -8,8 +8,12 @@ import os
 from typing import List, Tuple
 import json
 from tf_transformations import euler_from_quaternion
-from scipy.spatial.transform import Rotation as R
+from collections import deque
 import math
+from numpy.linalg import inv
+from scipy.ndimage import binary_dilation
+from scipy.ndimage import binary_erosion
+from scipy.spatial import distance
 
 EPSILON = 0.00000000001
 
@@ -71,7 +75,7 @@ class LineTrajectory:
             return (1.0 - t) * self.distances[i] + t * self.distances[i + 1]
 
     def addPoint(self, point: Tuple[float, float]) -> None:
-        #print("adding point to trajectory:", point)
+        print("adding point to trajectory:", point)
         self.points.append(point)
         self.update_distances()
         self.mark_dirty()
@@ -134,9 +138,9 @@ class LineTrajectory:
 
     def publish_start_point(self, duration=0.0, scale=0.1):
         should_publish = len(self.points) > 0
-        self.node.get_logger().info("Before Publishing start point")
+        #self.node.get_logger().info("Before Publishing start point")
         if self.visualize and self.start_pub.get_subscription_count() > 0:
-            self.node.get_logger().info("Publishing start point")
+            #self.node.get_logger().info("Publishing start point")
             marker = Marker()
             marker.header = self.make_header("/map")
             marker.ns = self.viz_namespace + "/trajectory"
@@ -195,7 +199,7 @@ class LineTrajectory:
     def publish_trajectory(self, duration=0.0):
         should_publish = len(self.points) > 1
         if self.visualize and self.traj_pub.get_subscription_count() > 0:
-            self.node.get_logger().info("Publishing trajectory")
+            #self.node.get_logger().info("Publishing trajectory")
             marker = Marker()
             marker.header = self.make_header("/map")
             marker.ns = self.viz_namespace + "/trajectory"
@@ -239,22 +243,37 @@ class LineTrajectory:
         header.frame_id = frame_id
         return header
 
-class Map:
+
+class Map():
     """
     2D map discretization Abstract Data Type
     """
-    def __init__(self, msg, node, lanes) -> None:
-        
+    def __init__(self, msg, node, lanes, forbidden) -> None:
         self.node = node
-        self.lanes = lanes
-        self.height = msg.info.height
-        self.width = msg.info.width
+        self.height = msg.info.height #1300
+        self.width = msg.info.width #1730
         self.resolution = msg.info.resolution
-        orientation = msg.info.origin.orientation
-        self.poseOrientation = [orientation.x, orientation.y, orientation.z, orientation.w]
-        self.angles = euler_from_quaternion(self.poseOrientation)
+        self.orientation = msg.info.origin.orientation
+        poseOrientation = [self.orientation.x, self.orientation.y, self.orientation.z, self.orientation.w]
+        self.angles = euler_from_quaternion(poseOrientation)
         self.posePoint = np.array([[msg.info.origin.position.x], [msg.info.origin.position.y], [msg.info.origin.position.z]])
-        self.data = np.array(msg.data).reshape((self.height, self.width))
+        self.map_translation = (msg.info.origin.position.x, msg.info.origin.position.y)
+        self.data = np.reshape(np.array(msg.data), (self.height, self.width))
+        self.raw_data = np.array(msg.data).shape
+        self.transformation_matrix = None
+        self.dilated = self.erode_map(self.dilate_map(self.data))
+        self.lanes = lanes
+        self.forbidden = forbidden
+
+    def dilate_map(self, data):
+        struct_element = np.ones((11, 11))
+        dilated_map = binary_dilation(data, structure=struct_element).astype(np.uint8)
+        return dilated_map
+    
+    def erode_map(self, data):
+        struct_element = np.ones((11, 11))
+        eroded_map = binary_erosion(data, structure=struct_element).astype(np.uint8)
+        return eroded_map
 
     def z_axis_rotation_matrix(self, yaw):
         return np.array([[np.cos(yaw), -np.sin(yaw), 0], [np.sin(yaw), np.cos(yaw), 0], [0, 0, 1]])
@@ -263,8 +282,8 @@ class Map:
         pixelCoord = [i*self.resolution for i in pixelCoord]
         rotatedCoord = np.array([pixelCoord[0]], [pixelCoord[1]], [0.0]) * self.z_axis_rotation_matrix(self.angles[2])
         rotatedCoord = rotatedCoord + self.posePoint
-        return (rotatedCoord[0, 0], rotatedCoord[1, 0])      
-
+        return (rotatedCoord[0, 0], rotatedCoord[1, 0])
+    
     def real_to_pixel(self, realCoord: Tuple[float, float]) -> Tuple[int, int]:
 
         x, y = realCoord
@@ -416,19 +435,27 @@ class Map:
 
         # Calculate the orientation angle from the given point to the closest point on the line segment
         orientation = math.atan2(closest_point_y - point[1], closest_point_x - point[0]) - math.pi / 2
-
+        self.node.get_logger().info(str(math.degrees(orientation)))
         return orientation
 
 
     def get_pixel(self, u, v):
-        return self.data[v][u]
+        return self.dilated[v][u]
+    
+    def clean_path(self, path, threshold=0.1):
+        cleaned_path = [path[0]]  # Start with the first point
+        for i in range(1, len(path)):
+            # Compute distance between consecutive points
+            dist = distance.euclidean(path[i], path[i-1])
+            # If distance is greater than threshold, add the point to cleaned path
+            if dist > threshold:
+                cleaned_path.append(path[i])
+        return np.array(cleaned_path)
     
     def bfs(self, start_point, end_point):
 
         start_point = self.discretization(start_point[0], start_point[1])
         end_point = self.discretization(end_point.x, end_point.y)
-        # start_point = self.discretization(11.094404220581055, -1.1191177368164062)
-        # end_point = self.discretization(-16.592947006225586, 25.76806640625)
 
         visited = set(start_point) 
         queue = [(start_point, [start_point])]
@@ -436,70 +463,84 @@ class Map:
         while queue:
             node, path = queue.pop(0)
             if node == end_point:
-                return path   
+                return self.clean_path(path)  
                 
             for neighbor in self.get_neighbors(node[0], node[1]):
                 if neighbor not in visited:
                     visited.add(neighbor)
                     queue.append((neighbor, path + [neighbor]))
 
+    def point_inside_forbidden(self, x, y):
+        # Function to determine if a point (x, y) lies inside forbidden zone
+        # self.forbidden is a list of (x, y) points defining the vertices of the forbidden zone
+        
+        n = len(self.forbidden)
+        inside = False
+        p1x, p1y = self.forbidden[0]
+        for i in range(n + 1):
+            p2x, p2y = self.forbidden[i % n]
+            if y > min(p1y, p2y):
+                if y <= max(p1y, p2y):
+                    if x <= max(p1x, p2x):
+                        if p1y != p2y:
+                            xints = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                        if p1x == p2x or x <= xints:
+                            inside = not inside
+            p1x, p1y = p2x, p2y
+        # self.node.get_logger().info(str(inside))
+        return inside
+
     def discretization(self, x, y):
-        rounded_x = round(x * 2) / 2  # Round x to the nearest multiple of 0.5
-        rounded_y = round(y * 2) / 2  # Round y to the nearest multiple of 0.5
+        rounded_x = round(x * 4) / 4  # Round x to the nearest multiple of 0.25
+        rounded_y = round(y * 4) / 4  # Round y to the nearest multiple of 0.25
         return (rounded_x, rounded_y)
-
-
-    # def get_neighbors(self, x, y):
-    #     neighbors = []
-    #     directions = [(0, 0.5), (0.5, 0), (0, -0.5), (-0.5, 0), (-0.5, 0.5), (0.5, 0.5), (0.5, -0.5), (-0.5, -0.5)]
-    #     for dx, dy in directions:
-    #         nx, ny = x + dx, y + dy
-    #         u, v = self.real_to_pixel((nx, ny))
-    #         if (-self.width <= u and u < self.width) and (-self.height <= v and v < self.height) and (self.get_pixel(u, v) == 0): # self.point_not_within_distance(self.lanes, (nx, ny), 0.7):
-    #             neighbors.append((nx, ny))
-
-    #     return neighbors
+    
+    def within_angle_range(self, alpha, beta, target):
+        # Calculate the absolute difference between alpha and beta
+        difference = abs(alpha - beta)
+        
+        # If the absolute difference is greater than 180 degrees, subtract 360 degrees
+        while difference > 360:
+            difference -= 360
+        
+        # Take the absolute value of the result
+        difference = abs(difference)
+        
+        # Check if the absolute difference is less than or equal to the target
+        return difference <= target
 
     def get_neighbors(self, x, y):
         neighbors = []
-        directions = [(0, 0.5), (0.5, 0), (0, -0.5), (-0.5, 0), (-0.5, 0.5), (0.5, 0.5), (0.5, -0.5), (-0.5, -0.5)]
+        directions = [(0, 0.25, -90), (0.25, 0, 0), (0, -0.25, 90), (-0.25, 0, -180), (-0.25, 0.25, -45), (0.25, 0.25, -135), (0.25, -0.25, 135), (-0.25, -0.25, 45)]
         
         # Get the perpendicular orientation at the current point
         orientation = self.perpendicular_orientation_at_point((x, y))
         
         # Convert orientation to degrees for comparison
-        orientation_degrees = math.degrees(orientation)
-        
-        # Define the acceptable orientation range (e.g., +/- 45 degrees from perpendicular)
-        orientation_range = 45
-
+        orientation_degrees = math.degrees(orientation) + 180
 
         # if you are far enough from the lane, then you can consider all neighbors
-        
+
         # this is to account for points that may be in corners/edges that will require 
         # the car to move in a direction that is not directly perpendicular to the lane
 
         min_distance = self.closest_line_segment((x, y), self.lanes)[1] 
         
-        for dx, dy in directions:
+        for dx, dy, theta in directions:
 
-            if min_distance < 1:
-                # Calculate the orientation of the current direction
-                direction_orientation = math.atan2(dy, dx)
-                
-                # Convert direction orientation to degrees for comparison
-                direction_orientation_degrees = math.degrees(direction_orientation)
-                
-                # Check if the direction is within the acceptable range of orientations
-                if abs(direction_orientation_degrees - orientation_degrees) <= orientation_range:
-                    nx, ny = x + dx, y + dy
-                    u, v = self.real_to_pixel((nx, ny))
-                    if (-self.width <= u < self.width) and (-self.height <= v < self.height): # and (self.get_pixel(u, v) == 0):
-                        neighbors.append((nx, ny))
-            else:
-                nx, ny = x + dx, y + dy
-                u, v = self.real_to_pixel((nx, ny))
-                if (-self.width <= u and u < self.width) and (-self.height <= v and v < self.height) and (self.get_pixel(u, v) == 0): # self.point_not_within_distance(self.lanes, (nx, ny), 0.7):
+            nx, ny = x + dx, y + dy
+            u, v = self.real_to_pixel((nx, ny))
+
+            if (-self.width <= u and u < self.width) and (-self.height <= v and v < self.height) and (self.get_pixel(u, v) == 0) and not self.point_inside_forbidden(nx, ny):
+
+                if min_distance < 0.25:
+                    range = 20
+                    reference = orientation_degrees + 90
+                else:
+                    range = 100
+                    reference = orientation_degrees
+
+                if self.within_angle_range(reference, theta, range):
                     neighbors.append((nx, ny))
 
         return neighbors
