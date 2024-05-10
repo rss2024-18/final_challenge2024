@@ -248,7 +248,7 @@ class Map():
     """
     2D map discretization Abstract Data Type
     """
-    def __init__(self, msg, node, lanes, forbidden) -> None:
+    def __init__(self, msg, node, lanes, forbidden, left, right, u_turns, left_zone, right_zone) -> None:
         self.node = node
         self.height = msg.info.height #1300
         self.width = msg.info.width #1730
@@ -264,6 +264,11 @@ class Map():
         self.dilated = self.erode_map(self.dilate_map(self.data))
         self.lanes = lanes
         self.forbidden = forbidden
+        self.left_traj = left
+        self.right_traj = right
+        self.u_turns = u_turns
+        self.left_zone = left_zone
+        self.right_zone = right_zone
 
     def dilate_map(self, data):
         struct_element = np.ones((11, 11))
@@ -353,7 +358,66 @@ class Map():
                 closest_segment = segment
 
         return (closest_segment, min_distance)
+    
+    def zone_identifier(self, x, y):
+        in_right = self.point_inside_forbidden(x, y, self.right_zone)
+        in_left = self.point_inside_forbidden(x, y, self.left_zone)
+        self.node.get_logger().info("In right is: " + str(in_right) + "and in left is: " + str(in_left))
+        return (in_left, in_right)
 
+    def closest_point_to_lanes(self, start, finish):
+
+        start = (start[0], start[1])
+        finish = (finish.x, finish.y)
+
+        start_zone = self.zone_identifier(start[0], start[1])
+        finish_zone = self.zone_identifier(finish[0], finish[1])
+
+        if start_zone[0]:
+            shortest_start = self.closest_line_segment(start, self.left_traj)
+            index1 = self.left_traj.index(shortest_start[0][1])
+        else:
+            shortest_start = self.closest_line_segment(start, self.right_traj)
+            index1 = self.right_traj.index(shortest_start[0][1])
+
+        if finish_zone[0]:
+            shortest_finish = self.closest_line_segment(finish, self.left_traj)
+            index2 = self.left_traj.index(shortest_finish[0][0])
+        else:
+            shortest_finish = self.closest_line_segment(finish, self.right_traj)
+            index2 = self.right_traj.index(shortest_finish[0][0])
+        
+        if start_zone[0] and finish_zone[0]:
+            return [start] + self.left_traj[index1:index2 + 1] + [finish]
+        elif start_zone[0] and finish_zone[1]:
+            return [start] + self.left_traj[index1:] + self.u_turns[0] + self.right_traj[:index2] + [finish]
+        elif start_zone[1] and finish_zone[0]:
+            return [start] + self.right_traj[index1:] + self.u_turns[1] + self.left_traj[:index2] + [finish]
+        else:
+            return [start] + self.right_traj[index1:index2 + 1] + [finish]
+        
+        # shortest_left_start = self.closest_line_segment(start, self.left_traj)
+        # shortest_right_start = self.closest_line_segment(start, self.right_traj)
+        # shortest_left_finish = self.closest_line_segment(finish, self.left_traj)
+        # shortest_right_finish = self.closest_line_segment(start, self.right_traj)
+
+        # if shortest_left_start[1] < shortest_right_start[1]:
+        #     index1 = self.left_traj.index(shortest_left_start[0][1])
+        #     if shortest_left_finish[1] < shortest_right_finish[1]:
+        #         index2 = self.left_traj.index(shortest_left_finish[0][0])
+        #         return [start] + self.left_traj[index1:index2 + 1] + [finish]
+        #     else:
+        #         index2 = self.right_traj.index(shortest_right_finish[0][0])
+        #         return [start] + self.left_traj[index1:] + self.u_turns[0] + self.right_traj[:index2] + [finish]
+        # else:
+        #     index1 = self.right_traj.index(shortest_right_start[0][1])
+        #     if shortest_left_finish[1] < shortest_right_finish[1]:
+        #         index2 = self.left_traj.index(shortest_left_finish[0][0])
+        #         return [start] + self.right_traj[index1:] + self.u_turns[1] + self.left_traj[:index2] + [finish]
+        #     else:
+        #         index2 = self.right_traj.index(shortest_right_finish[0][0])
+        #         return [start] + self.right_traj[index1:index2 + 1] + [finish]
+            
     def perpendicular_line_through_point(self, point, line_segments):
         closest_segment = self.closest_line_segment(point, line_segments)[0]
 
@@ -435,7 +499,7 @@ class Map():
 
         # Calculate the orientation angle from the given point to the closest point on the line segment
         orientation = math.atan2(closest_point_y - point[1], closest_point_x - point[0]) - math.pi / 2
-        self.node.get_logger().info(str(math.degrees(orientation)))
+        # self.node.get_logger().info(str(math.degrees(orientation)))
         return orientation
 
 
@@ -470,15 +534,15 @@ class Map():
                     visited.add(neighbor)
                     queue.append((neighbor, path + [neighbor]))
 
-    def point_inside_forbidden(self, x, y):
+    def point_inside_forbidden(self, x, y, polygon):
         # Function to determine if a point (x, y) lies inside forbidden zone
         # self.forbidden is a list of (x, y) points defining the vertices of the forbidden zone
         
-        n = len(self.forbidden)
+        n = len(polygon)
         inside = False
-        p1x, p1y = self.forbidden[0]
+        p1x, p1y = polygon[0]
         for i in range(n + 1):
-            p2x, p2y = self.forbidden[i % n]
+            p2x, p2y = polygon[i % n]
             if y > min(p1y, p2y):
                 if y <= max(p1y, p2y):
                     if x <= max(p1x, p2x):
@@ -517,7 +581,7 @@ class Map():
         orientation = self.perpendicular_orientation_at_point((x, y))
         
         # Convert orientation to degrees for comparison
-        orientation_degrees = math.degrees(orientation) + 180
+        orientation_degrees = math.degrees(orientation)
 
         # if you are far enough from the lane, then you can consider all neighbors
 
