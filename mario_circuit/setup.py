@@ -26,7 +26,7 @@ setup(
         'console_scripts': [
             'lane_segmentation = mario_circuit.lane_segmentation:main',
             'homography_transformer = mario_circuit.homography_transformer:main',
-            'goal_follower = mario_circuit.goal_follower:main'
+            'goal_follower = mario_circuit.goal_follower:main',
         ],
     },
 )

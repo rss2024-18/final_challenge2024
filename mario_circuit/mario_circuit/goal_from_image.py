@@ -60,7 +60,7 @@ def cd_color_segmentation(img, height = 360, width = 640, template = None):
     # image_print(img_thick)
     # image_print(img)
         return (average_x, height_of_interest, thresholded)
-    return thresholded
+    return img_thick
 	    
 if __name__ == "__main__":
     # code in this block will only be run when you explicitly run your script,

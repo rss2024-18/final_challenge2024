@@ -1,22 +1,3 @@
-## mario circuit notes
-- run teleop, camera, and launch file
-  - camera: `unset DISPLAY` then `ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed`
-  - launch file: `ros2 launch mario_circuit mario_circuit.launch.xml`
-- visualize in `rqt` image view plugin 
-  - `/zed/zed_node/rgb/image_rect_color` for camera view
-  - `/debug` for debug view (shows goal pixel and `thresholded` from goal_from_image.py)
-    - change return value in `cd_color_segmentation` to debug different intermediate variables
-
-TODO:
-- send drive commands on separate timer (to prevent stuttering issues below 10 Hz)
-- debug controller / teleop / safety controller issues (was spotty on Monday)
-- decrease oscillations in lane on the straightaways
-  - try low pass filter?
-  - try error deadzone?
-  - try hardcoding straightaway detection?
-- handle current edge cases causing lane departure (white numbers on track, crossing lines on the curve)
-  - lots of possible ways... first, what is the car seeing on `/debug` in each case before it loses the ideal goal point?
-
 | Deliverable | Due Date              |
 |---------------|----------------------------------------------------------------------------|
 | Race Day | Saturday, May 11th 11AM - 2PM EST |

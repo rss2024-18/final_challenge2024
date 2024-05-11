@@ -1,4 +1,6 @@
 from setuptools import setup
+import glob
+import os
 
 package_name = 'luigi_castle'
 
@@ -10,6 +12,8 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/luigi_castle/launch', glob.glob(os.path.join('launch', '*launch.xml'))),
+         (os.path.join('share', package_name, 'config'), glob.glob('config/*.yaml'))
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -20,7 +24,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'stop_detector = luigi_castle.stop_detector:main'
+            'path_builder = luigi_castle.path_builder:main',
+            'path_follower = luigi_castle.path_follower:main'
         ],
     },
 )

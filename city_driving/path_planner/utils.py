@@ -197,6 +197,7 @@ class LineTrajectory:
     def publish_trajectory(self, duration=0.0):
         should_publish = len(self.points) > 1
         if self.visualize and self.traj_pub.get_subscription_count() > 0:
+            self.get_logger().info("VISUALIZATION")
             #self.node.get_logger().info("Publishing trajectory")
             marker = Marker()
             marker.header = self.make_header("/map")

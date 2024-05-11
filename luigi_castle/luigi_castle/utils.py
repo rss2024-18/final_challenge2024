@@ -33,7 +33,7 @@ class LineTrajectory:
         if viz_namespace:
             self.visualize = True
             self.start_pub = self.node.create_publisher(Marker, viz_namespace + "/start_point", 1)
-            self.traj_pub = self.node.create_publisher(Marker, viz_namespace + "/path", 1)
+            self.traj_pub = self.node.create_publisher(Marker, viz_namespace + "/marker", 1)
             self.end_pub = self.node.create_publisher(Marker, viz_namespace + "/end_pose", 1)
 
     # compute the distances along the path for all path segments beyond those already computed
@@ -167,6 +167,7 @@ class LineTrajectory:
 
     def publish_end_point(self, duration=0.0):
         should_publish = len(self.points) > 1
+        print("trying to publish end point")
         if self.visualize and self.end_pub.get_subscription_count() > 0:
             marker = Marker()
             marker.header = self.make_header("/map")
@@ -197,7 +198,7 @@ class LineTrajectory:
     def publish_trajectory(self, duration=0.0):
         should_publish = len(self.points) > 1
         if self.visualize and self.traj_pub.get_subscription_count() > 0:
-            #self.node.get_logger().info("Publishing trajectory")
+            self.node.get_logger().info("Publishing trajectory")
             marker = Marker()
             marker.header = self.make_header("/map")
             marker.ns = self.viz_namespace + "/trajectory"
@@ -277,7 +278,7 @@ class Map():
         self.transformation_matrix = None
 
     def dilate_map(self):
-        struct_element = np.ones((11, 11))
+        struct_element = np.ones((5, 5))
         dilated_map = binary_dilation(self.data, structure=struct_element).astype(np.uint8)
         return dilated_map
 
@@ -335,6 +336,8 @@ class Map():
         return math.sqrt((x1 - x2)**2 + (y1 - y2)**2) * 10
     
     def a_star(self, start, end):
+        print(str(start))
+        print(str(end))
         self.data = self.dilate_map()
         start = self.discretization(start[0], start[1])
         end = self.discretization(end[0], end[1])
