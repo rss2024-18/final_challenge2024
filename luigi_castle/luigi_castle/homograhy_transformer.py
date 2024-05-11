@@ -81,6 +81,7 @@ class HomographyTransformer(Node):
         #self.ros_sub = self.create_subscription(Image, "/zed/zed_node/rgb_raw/image_raw_color", self.ros_to_cv, 10)
         #self.click_sub = self.create_subscription(PointStamped, "/clicked_point", self.click_callback, 10)
         self.click_pub = self.create_subscription(Point, "/zed/rgb/image_rect_color_mouse_left", self.mouse_callback, 10)
+        self.actual_light = self.create_publisher(Point, "/actual_light")
         self.model = PinholeCameraModel()
 
         if not len(PTS_GROUND_PLANE) == len(PTS_IMAGE_PLANE):
@@ -110,14 +111,14 @@ class HomographyTransformer(Node):
         x, y = self.transformUvToXy(u, v)
 
         #Publish relative xy position of object in real world
-        relative_xy_msg = ConeLocation()
-        relative_xy_msg.x_pos = x
-        relative_xy_msg.y_pos = y
+        light_location = Point()
+        light_location.x = x
+        light_location.y = y
 
         self.get_logger().info(str(relative_xy_msg.x_pos))
         self.get_logger().info(str(relative_xy_msg.y_pos))
 
-        self.cone_pub.publish(relative_xy_msg)
+        self.actual_light.publish(light_location)
 
 
     def transformUvToXy(self, u, v):

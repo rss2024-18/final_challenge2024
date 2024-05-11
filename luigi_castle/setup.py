@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'stop_detector = luigi_castle.stop_detector:main'
+            'stop_detector = luigi_castle.stop_detector:main',
+            'homography_transformer = luigi_castle.homography_transformer:main'
         ],
     },
 )
