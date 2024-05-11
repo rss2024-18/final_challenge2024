@@ -1,6 +1,7 @@
 
 import rclpy
 from rclpy.node import Node
+import math
 
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
@@ -11,26 +12,51 @@ from sensor_msgs.msg import Image
 #from . import detector 
 from geometry_msgs.msg import PointStamped, Point
 from vs_msgs.msg import ConeLocation, ConeLocationPixel
+from std_msgs.msg import Bool
+from nav_msgs.msg import Odometry
+
 
 class SignDetector(Node):
     def __init__(self):
         super().__init__("stop_detector")
         #self.detector = detector.StopSignDetector()
         #self.stop_sign_pub = self.create_publisher(Point, "/stop_sign")
-        self.stop_light_pub = self.create_publisher(ConeLocationPixel, "/stop_light", 10)
+        self.stop_light_pub = self.create_publisher(Bool, "/stop_light", 10)
         self.subscriber = self.create_subscription(Image, "/zed/zed_node/rgb/image_rect_color", self.callback, 1)
+        self.drive_sub = self.create_subscription(Odometry, "/odom", self.odom_callback, 1)
         self.bridge = CvBridge()
+        self.stoplight_region = False
+        self.range = 30
+        self.stoplight_1 = (-10.57, 16.17)
+        self.stoplight_2 = (-31.64, 34.09)
+        self.stoplight_3 = (-54.59, 24.50)
+
 
         self.max_light_size = 800
         self.x_pixels = 100
         self.buffer = 5
         
         timer_period = 2.0 #seconds
-        self.image = cv2.imread('/home/racecar/racecar_ws/src/final_challenge2024/media/download-5.jpg')
+        self.image = cv2.imread('/home/racecar/racecar_ws/src/final_challenge2024/media/download-7.jpg')
         if self.image is None:
             self.get_logger().info("IMAGE FAILED TO LOAD")
         self.timer = self.create_timer(timer_period, self.callback)
         self.get_logger().info("Stop Detector Initialized")
+
+    def odom_callback(self, msg):
+        current_x = msg.pose.pose.position.x
+        current_y = msg.pose.pose.position.y
+
+        dist_1 = math.sqrt((self.stoplight_1[0]-current_x)**2+(self.stoplight_1[1]-current_y)**2)
+        dist_2 = math.sqrt((self.stoplight_2[0]-current_x)**2+(self.stoplight_2[1]-current_y)**2)
+        dist_3 = math.sqrt((self.stoplight_3[0]-current_x)**2+(self.stoplight_3[1]-current_y)**2)
+
+        if dist_1 < self.range or dist_2 < self.range or dist_3 < self.range:
+            self.stoplight_region = True
+        else:
+            self.stoplight_region = False
+
+
 
     def callback(self):
         # Process image with CV Bridge
@@ -43,14 +69,22 @@ class SignDetector(Node):
         #stop_image, stop_bb = StopSignDetector.predict(image)
         stop_image = False
         stop_bb = None
-        redlight, redlight_c = self.stoplight_detector(image, stop_bb)
+        if self.stoplight_region:
+            redlight, redlight_c = self.stoplight_detector(image, stop_bb)
+        else:
+            redlight = False
 
-        light = ConeLocationPixel()
+        # light = ConeLocationPixel()
+        light = Bool()
         if redlight:
-            light.u = float(redlight_c[0])
-            light.v = float(redlight_c[1])
+            # light.u = float(redlight_c[0])
+            # light.v = float(redlight_c[1])
+            light.data = True
             self.get_logger().info("redlight detected")
-            self.stop_light_pub.publish(light)
+        else:
+            light.data = False
+        
+        self.stop_light_pub.publish(light)
 
         # stop = Point()
         # if stop_image:

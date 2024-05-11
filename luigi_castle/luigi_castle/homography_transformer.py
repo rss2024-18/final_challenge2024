@@ -75,13 +75,13 @@ class HomographyTransformer(Node):
 
         self.sign_pub = self.create_publisher(ConeLocation, "/relative_cone", 10)
         self.marker_pub = self.create_publisher(Marker, "/cone_marker", 1)
-        self.cone_px_sub = self.create_subscription(ConeLocationPixel, "/relative_cone_px", self.cone_detection_callback, 1)
+        self.cone_px_sub = self.create_subscription(ConeLocationPixel, "/stop_light", self.cone_detection_callback, 1)
 
         #
         #self.ros_sub = self.create_subscription(Image, "/zed/zed_node/rgb_raw/image_raw_color", self.ros_to_cv, 10)
         #self.click_sub = self.create_subscription(PointStamped, "/clicked_point", self.click_callback, 10)
         self.click_pub = self.create_subscription(Point, "/zed/rgb/image_rect_color_mouse_left", self.mouse_callback, 10)
-        self.actual_light = self.create_publisher(Point, "/actual_light")
+        self.actual_light = self.create_publisher(Point, "/actual_light", 10)
         self.model = PinholeCameraModel()
 
         if not len(PTS_GROUND_PLANE) == len(PTS_IMAGE_PLANE):
@@ -115,8 +115,8 @@ class HomographyTransformer(Node):
         light_location.x = x
         light_location.y = y
 
-        self.get_logger().info(str(relative_xy_msg.x_pos))
-        self.get_logger().info(str(relative_xy_msg.y_pos))
+        self.get_logger().info(str(light_location.x))
+        self.get_logger().info(str(light_location.y))
 
         self.actual_light.publish(light_location)
 
