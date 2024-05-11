@@ -7,5 +7,10 @@
     <node pkg="luigi_castle" exec="path_follower" name="path_follower" output="screen">
         <param from="$(find-pkg-share luigi_castle)/config/luigi_castle_config.yaml"/>
     </node>
+    <node pkg="localization" exec="particle_filter" name="particle_filter" output="screen">
+        <param from="$(find-pkg-share luigi_castle)/config/pf_config.yaml"/>
+    </node>
+    <node pkg="safety_controller" name="safety_controller" exec="safety_controller" output="screen">
+    </node>
     
 </launch>

@@ -10,6 +10,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
 from scipy.spatial.transform import Rotation
 from std_msgs.msg import Float32
+from visualization_msgs.msg import Marker
 import math
 
 class PurePursuit(Node):
@@ -19,10 +20,12 @@ class PurePursuit(Node):
     def __init__(self):
         super().__init__("path_follower")
         self.declare_parameter('odom_topic', "default")
+        self.declare_parameter('drive_filter_topic', "default")
         self.declare_parameter('drive_topic', "default")
 
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         self.drive_topic = self.get_parameter('drive_topic').get_parameter_value().string_value
+        self.drive_filter_topic = self.get_parameter('drive_filter_topic').get_parameter_value().string_value
 
         self.lookahead = 2.5  # FILL IN #
         self.speed = 0.6  # FILL IN #
@@ -41,6 +44,9 @@ class PurePursuit(Node):
         self.drive_pub = self.create_publisher(AckermannDriveStamped,
                                                self.drive_topic,
                                                1)
+        self.drive_filter_pub = self.create_publisher(AckermannDriveStamped,
+                                               self.drive_filter_topic,
+                                               1)
         self.debug_pub = self.create_publisher(PointStamped,
                                                "/debug/target",
                                                1)
@@ -50,7 +56,29 @@ class PurePursuit(Node):
         self.angle_pub = self.create_publisher(Float32, "/steering_angle", 1)
         self.dist_pub = self.create_publisher(Float32, "/perp_dist", 1)
 
+        # subscribe to path stops
+        self.stop1_sub = self.create_subscription(Marker, "/stop1", self.receive_stop, 1)
+
+        self.stops = [None, None, None, None]
+        self.last_stop = 3
+
+        self.stopping = False
+        self.stop_start = None
+
+    def receive_stop(self, marker_msg):
+        # Marker(index, x, y)
+        # stops array is 1-indexed
+        self.stops[marker_msg.id] = (marker_msg.pose.position.x, marker_msg.pose.position.y)
+
+
     def pose_callback(self, odometry_msg):
+        ## early return if stopped
+        if self.stopping:
+            self.get_logger().info(str(odometry_msg.header.stamp - self.stop_start))
+            if (odometry_msg.header.stamp - self.stop_start < 5.0):
+                return
+            self.stopping = False
+        
         if not self.initialized_traj: 
             return
         
@@ -64,7 +92,6 @@ class PurePursuit(Node):
         ends = trajectory_points[1:]
         vectors = ends - starts
         normalized = np.divide(vectors, (np.hypot(vectors[:,0], vectors[:,1]).reshape(-1,1)))
-        print("NORMALIED: " + str(normalized))
         parallel_start = np.multiply(starts-robot_point, normalized).sum(axis=1)
         parallel_end = np.multiply(robot_point-ends, normalized).sum(axis=1)
         clamped = np.maximum.reduce([parallel_start, parallel_end, np.zeros(len(parallel_start))])
@@ -72,7 +99,6 @@ class PurePursuit(Node):
         perpendicular = start_vectors[:,0] * normalized[:,1] - start_vectors[:,1] * normalized[:,0]
         distances = np.hypot(clamped, perpendicular)
 
-        print("DISTANCES:  "+ str(distances))
         closest_segment_index = np.argmin(distances)
         print(str(closest_segment_index))
         
@@ -80,25 +106,18 @@ class PurePursuit(Node):
         ## https://codereview.stackexchange.com/a/86428
         found = False
         target = None
-        print("ROBOT: " + str(robot_point))
         for i in range(closest_segment_index, len(starts)):
             P1 = starts[i]
-            print("P1: " + str(P1))
             V = vectors[i]
             a = np.dot(V, V)
             b = 2 * np.dot(V, P1 - robot_point)
             c = np.dot(P1, P1) + np.dot(robot_point, robot_point) - 2*np.dot(P1, robot_point) - self.lookahead**2
             disc = b**2 - 4*a*c
-            # self.get_logger().info(str(P1))
-            # self.get_logger().info(str(V))
-            # self.get_logger().info(str(robot_point))
-            # self.get_logger().info(str(disc))
             if disc < 0:
                 continue
             sqrt_disc = np.sqrt(disc)
             t1 = (-1*b + sqrt_disc) / (2*a)
             t2 = (-1*b - sqrt_disc) / (2*a)
-            print("t1: " + str(t1))
             # self.get_logger().info(str(t1) + " " + str(t2))
             if not (0 <= t1 <= 1): ## or 0 <= t2 <= 1
                 continue
@@ -114,7 +133,7 @@ class PurePursuit(Node):
             command.header.stamp = self.get_clock().now().to_msg()
             command.drive.steering_angle = 0.0
             command.drive.speed = 0.0
-            self.drive_pub.publish(command)
+            self.drive_filter_pub.publish(command)
             raise Exception("can't find target point")
         
         # visualize target
@@ -123,6 +142,24 @@ class PurePursuit(Node):
         pose.header.frame_id = "/map"
         pose.point.x, pose.point.y = target[0], target[1]
         self.debug_pub.publish(pose)
+
+        ## check if close enough to stop point
+        if self.last_stop != 3:
+            dist_to_next_stop = np.linalg.norm(self.stops[self.last_stop+1] - robot_point)
+            if dist_to_next_stop < 0.3:
+                command = AckermannDriveStamped()
+                command.header = odometry_msg.header
+                command.header.stamp = self.get_clock().now().to_msg()
+                command.drive.steering_angle = 0.0
+                command.drive.speed = 0.0
+                self.drive_filter_pub.publish(command)
+
+                self.last_stop += 1
+                ## hold for 5 seconds!
+                self.stopping = True
+                self.stop_start = odometry_msg.header.stamp
+
+
 
         ## get pure pursuit control action
         orientation = robot_pose.orientation
@@ -154,7 +191,7 @@ class PurePursuit(Node):
         command.header.stamp = self.get_clock().now().to_msg()
         command.drive.steering_angle = -delta
         command.drive.speed = self.speed
-        self.drive_pub.publish(command)
+        self.drive_filter_pub.publish(command)
 
 
     def trajectory_callback(self, msg):
