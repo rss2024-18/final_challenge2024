@@ -10,6 +10,7 @@ from std_msgs.msg import Int32, Int32MultiArray, Header
 from . import utils as util
 from builtin_interfaces.msg import Time
 from visualization_msgs.msg import Marker, MarkerArray
+import math
 
 import time
 import math
@@ -169,9 +170,13 @@ U_TURNS = [
             (-24.564105987548828, 33.55561065673828)        
         ],
         [
-            (-46.725677490234375, 34.407379150390625),
-            (-47.262733459472656, 33.9921875),
-            (-46.94284439086914, 33.546104431152344)
+            (-46.04154586791992, 34.57614517211914),
+            (-46.74259567260742, 33.90438461303711),
+            (-47.21416091918945, 33.33873748779297),
+            (-47.32617950439453, 32.5936164855957),
+            (-46.77643585205078, 32.401145935058594),
+            (-46.21577453613281, 32.72780227661133),
+            (-45.8232536315918, 33.318260192871094)
         ]
 
     ]
@@ -196,7 +201,8 @@ LEFT_LANE = [
     (-5.896455764770508, 26.16507911682129),
     (-13.876848220825195, 26.170467376708984),
     (-19.422794342041016, 26.210678100585938),
-    (-19.68124771118164, 26.234424591064453),
+    (-19.8124771118164, 26.234424591064453),
+    (-20.26637840270996, 26.27981948852539), # add this mf
     (-19.84954833984375, 27.100994110107422),
     (-19.89433479309082, 32.19474792480469),
     (-19.809860229492188, 34.312171936035156),
@@ -391,11 +397,10 @@ class PathPlan(Node):
             robot_pose = msg.pose.pose 
             robot_point = self.map.discretization(robot_pose.position.x, robot_pose.position.y)
             stop_point = self.map.discretization(self.stops[self.index][0], self.stops[self.index][1])
-            # self.get_logger().info("ROBOT:  " + str(robot_point)) 
-            # self.get_logger().info("STOP " + str(self.index) + ":  " + str(stop_point)) 
-
             
+                # dist = math.sqrt((robot_point[0]-stop_point[0])**2 + (robot_point[1]-stop_point[1])**2)
             if robot_point[0]==stop_point[0] and robot_point[1]==stop_point[1]:
+            # if dist <= 2:
                 self.get_logger().info("STOP REACHED") 
                 self.index += 1
                 self.stop_time = self.get_clock().now().to_msg()
@@ -481,22 +486,26 @@ class PathPlan(Node):
                 self.stop3_pub.publish(marker)
                 if self.map is not None and self.start is not None:
                     self.get_logger().info("path time BITCH")
-                    path = self.plan_path(self.start, self.stops[0], self.stops[1], self.stops[2], self.map)
+                    path = self.plan_path(self.start, self.stops[0], self.stops[1], self.stops[2], self.start, self.map)
     
 
-    def plan_path(self, start_point, stop_1, stop_2, stop_3, map):
+    def plan_path(self, start_point, stop_1, stop_2, stop_3, destination, map):
         # construct a trajectory
         # self.get_logger().info(str(self.stops[0]))
         # self.get_logger().info(str(self.stops[1]))
         # self.get_logger().info(str(self.stops[2]))
-        path0 = self.map.closest_point_to_lanes(self.start, self.stops[0])
-        print(str(path0))
+        # print("START: " + str(start_point))
+        # print(self.start)
+        path0 = self.map.closest_point_to_lanes(start_point, self.stops[0])
+        # print(str(path0))
         path1 = self.map.closest_point_to_lanes(self.stops[0], self.stops[1])
-        print(str(path1))
+        # print(str(path1))
         path2 = self.map.closest_point_to_lanes(self.stops[1], self.stops[2])
-        print(str(path2))
+        # print(str(path2))
+        finalpath = self.map.closest_point_to_lanes(self.stops[2], destination)
+        # print(str(finalpath))
 
-        path = path0 + path1[1:] + path2[1:]
+        path = path0 + path1[1:] + path2[1:] # + finalpath[1:-1]
         
         
         # add to trajectory

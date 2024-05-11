@@ -4,14 +4,18 @@ from geometry_msgs.msg import PoseArray
 from rclpy.node import Node
 
 from .utils import LineTrajectory
+from .detector import StopSignDetector
 
 import numpy as np
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
 from scipy.spatial.transform import Rotation
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Bool
 from visualization_msgs.msg import Marker
+from sensor_msgs.msg import Image
 import math
+import cv2
+from cv_bridge import CvBridge
 
 class PurePursuit(Node):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
@@ -27,8 +31,8 @@ class PurePursuit(Node):
         self.drive_topic = self.get_parameter('drive_topic').get_parameter_value().string_value
         self.drive_filter_topic = self.get_parameter('drive_filter_topic').get_parameter_value().string_value
 
-        self.lookahead = 2.5  # FILL IN #
-        self.speed = 0.6  # FILL IN #
+        self.lookahead = 1.2  # FILL IN #
+        self.speed = 0.8  # FILL IN #
         self.wheelbase_length = 0.3  # FILL IN #
 
         self.trajectory = LineTrajectory("/planned_trajectory")
@@ -50,6 +54,10 @@ class PurePursuit(Node):
         self.debug_pub = self.create_publisher(PointStamped,
                                                "/debug/target",
                                                1)
+        # self.stoplight_sub = self.create_subscription(Bool,
+        #                                               "/stop_light",
+        #                                               self.stoplight_cb,
+        #                                               10)
 
         self.initialized_traj = False
 
@@ -57,27 +65,72 @@ class PurePursuit(Node):
         self.dist_pub = self.create_publisher(Float32, "/perp_dist", 1)
 
         # subscribe to path stops
-        self.stop1_sub = self.create_subscription(Marker, "/stop1", self.receive_stop, 1)
+        # self.stop1_sub = self.create_subscription(Marker, "/stop1", self.receive_stop, 1)
 
-        self.stops = [None, None, None, None]
-        self.last_stop = 3
+        # self.stops = [None, None, None, None]
+        # self.last_stop = 3
 
-        self.stopping = False
-        self.stop_start = None
+        # self.stopping = False
+        # self.stop_start = None
 
-    def receive_stop(self, marker_msg):
-        # Marker(index, x, y)
-        # stops array is 1-indexed
-        self.stops[marker_msg.id] = (marker_msg.pose.position.x, marker_msg.pose.position.y)
+        # self.stop_now = False
+
+        # self.ssd = StopSignDetector()
+        # self.image_sub = self.create_subscription(Image,
+        #                                           "/zed/zed_node/rgb/image_rect_color",
+        #                                           self.image_cb,
+        #                                           10)
+        # self.bridge = CvBridge()
+        # self.time_last_stop_sign = self.get_clock().now().to_msg()
+        # self.stop_sign_stop = False
+        
+    # def image_cb(self, image_msg):
+    #     image = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
+    #     image = np.asarray(image[:,:])
+    #     detected, bounding_box = self.ssd.predict(image)
+    #     if detected and (bounding_box[2]-bounding_box[0]) * (bounding_box[3]-bounding_box[1]):
+    #         curr_time = self.get_clock().now().to_msg()
+    #         if curr_time.sec >= self.time_last_stop_sign.sec + 10: 
+    #             self.stop_sign_stop = True
+    #             self.time_last_stop_sign = self.get_clock().now().to_msg()
+
+
+    # def stoplight_cb(self, bool_msg):
+    #     self.stop_now = bool_msg
+
+    # def receive_stop(self, marker_msg):
+    #     # Marker(index, x, y)
+    #     # stops array is 1-indexed
+    #     self.stops[marker_msg.id] = (marker_msg.pose.position.x, marker_msg.pose.position.y)
 
 
     def pose_callback(self, odometry_msg):
+        # if self.stop_now:
+        #     command = AckermannDriveStamped()
+        #     command.header = odometry_msg.header
+        #     command.header.stamp = self.get_clock().now().to_msg()
+        #     command.drive.steering_angle = 0.0
+        #     command.drive.speed = 0.0
+        #     self.drive_filter_pub.publish(command)
+        #     return
+        # curr_time = self.get_clock().now().to_msg()
+        # if self.stop_sign_stop:
+        #     if curr_time.sec <= self.time_last_stop_sign.sec + 1:
+        #         command = AckermannDriveStamped()
+        #         command.header = odometry_msg.header
+        #         command.header.stamp = self.get_clock().now().to_msg()
+        #         command.drive.steering_angle = 0.0
+        #         command.drive.speed = 0.0
+        #         self.drive_filter_pub.publish(command)
+        #         return
+        #     else:
+        #         self.stop_sign_stop = False
         ## early return if stopped
-        if self.stopping:
-            self.get_logger().info(str(odometry_msg.header.stamp - self.stop_start))
-            if (odometry_msg.header.stamp - self.stop_start < 5.0):
-                return
-            self.stopping = False
+        # if self.stopping:
+        #     self.get_logger().info(str(odometry_msg.header.stamp - self.stop_start))
+        #     if (odometry_msg.header.stamp - self.stop_start < 5.0):
+        #         return
+        #     self.stopping = False
         
         if not self.initialized_traj: 
             return
@@ -100,7 +153,7 @@ class PurePursuit(Node):
         distances = np.hypot(clamped, perpendicular)
 
         closest_segment_index = np.argmin(distances)
-        print(str(closest_segment_index))
+        # print(str(closest_segment_index))
         
         ## search for lookahead point
         ## https://codereview.stackexchange.com/a/86428
@@ -116,8 +169,8 @@ class PurePursuit(Node):
             if disc < 0:
                 continue
             sqrt_disc = np.sqrt(disc)
-            t1 = (-1*b + sqrt_disc) / (2*a)
-            t2 = (-1*b - sqrt_disc) / (2*a)
+            t1 = (-b + sqrt_disc) / (2*a)
+            t2 = (-b - sqrt_disc) / (2*a)
             # self.get_logger().info(str(t1) + " " + str(t2))
             if not (0 <= t1 <= 1): ## or 0 <= t2 <= 1
                 continue
@@ -143,21 +196,21 @@ class PurePursuit(Node):
         pose.point.x, pose.point.y = target[0], target[1]
         self.debug_pub.publish(pose)
 
-        ## check if close enough to stop point
-        if self.last_stop != 3:
-            dist_to_next_stop = np.linalg.norm(self.stops[self.last_stop+1] - robot_point)
-            if dist_to_next_stop < 0.3:
-                command = AckermannDriveStamped()
-                command.header = odometry_msg.header
-                command.header.stamp = self.get_clock().now().to_msg()
-                command.drive.steering_angle = 0.0
-                command.drive.speed = 0.0
-                self.drive_filter_pub.publish(command)
+        # ## check if close enough to stop point
+        # if self.last_stop != 3:
+        #     dist_to_next_stop = np.linalg.norm(self.stops[self.last_stop+1] - robot_point)
+        #     if dist_to_next_stop < 0.3:
+        #         command = AckermannDriveStamped()
+        #         command.header = odometry_msg.header
+        #         command.header.stamp = self.get_clock().now().to_msg()
+        #         command.drive.steering_angle = 0.0
+        #         command.drive.speed = 0.0
+        #         self.drive_filter_pub.publish(command)
 
-                self.last_stop += 1
-                ## hold for 5 seconds!
-                self.stopping = True
-                self.stop_start = odometry_msg.header.stamp
+        #         self.last_stop += 1
+        #         ## hold for 5 seconds!
+        #         self.stopping = True
+        #         self.stop_start = odometry_msg.header.stamp
 
 
 

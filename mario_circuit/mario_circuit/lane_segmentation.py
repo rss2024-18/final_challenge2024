@@ -34,7 +34,7 @@ class LaneSegmentation(Node):
         self.image_sub = self.create_subscription(Image,
                                                   self.image_topic,
                                                   self.image_callback,
-                                                  5)
+                                                  10)
         self.pixel_pub = self.create_publisher(Point,
                                                self.pixel_topic,
                                                10)
@@ -44,7 +44,7 @@ class LaneSegmentation(Node):
         
         self.bridge = CvBridge() # Converts between ROS images and OpenCV Images
 
-        self.last_goal = None
+        self.last_goal = (320, 234)
         self.get_logger().info("Lane Segmentation Initialized")
 
     def image_callback(self, image_msg):

@@ -1,5 +1,5 @@
 <launch>
-    <node pkg="safety_controller" name="safety_controller" exec="safety_controller" output="screen"></node>
+    <!-- <node pkg="safety_controller" name="safety_controller" exec="safety_controller" output="screen"></node> -->
     <node pkg="mario_circuit" exec="lane_segmentation" name="lane_segmentation" output="screen">
         <param from="$(find-pkg-share mario_circuit)/config/mario_circuit_config.yaml"/>
     </node>

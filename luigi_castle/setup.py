@@ -25,7 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'path_builder = luigi_castle.path_builder:main',
-            'path_follower = luigi_castle.path_follower:main'
+            'path_follower = luigi_castle.path_follower:main',
+            'stop_detector = luigi_castle.stop_detector:main'
         ],
     },
 )

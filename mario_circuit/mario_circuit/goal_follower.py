@@ -22,7 +22,7 @@ class GoalFollower(Node):
         self.goal_topic = self.get_parameter('goal_topic').get_parameter_value().string_value
         self.drive_topic = self.get_parameter('drive_topic').get_parameter_value().string_value
         self.SPEED = self.get_parameter('speed').get_parameter_value().double_value
-        self.SPEED = 4.0
+        self.SPEED = 3.0
         self.WHEELBASE_LENGTH = self.get_parameter('wheelbase_length').get_parameter_value().double_value
 
         self.timer = self.create_timer(1 / 20, self.timer_callback)
@@ -41,8 +41,8 @@ class GoalFollower(Node):
         self.alpha = 0.8
 
         self.last_error = 0.0
-        self.kp = 1.5 # 0.4 # 0.5
-        self.kd = 3.0 # 0.25 # 0.3
+        self.kp = 0.08 # 0.18 # 0.4 # 0.5
+        self.kd = 0.5 # 0.35 # 0.25 # 0.3
 
     def timer_callback(self):
         # self.get_logger().info(str(self.drive_cmd))
@@ -57,16 +57,20 @@ class GoalFollower(Node):
         cmd.header.stamp = self.get_clock().now().to_msg()
         cmd.header.frame_id = "/map"
         cmd.drive.speed = self.SPEED
-        # delta = np.arctan(2*self.WHEELBASE_LENGTH*msg.point.y / (msg.point.x**2 + msg.point.y**2)) * 1.2
+        # delta = np.arctan(2*self.WHEELBASE_LENGTH*msg.point.y / (msg.point.x**2 + msg.point.y**2)) 
         # delta = self.alpha * self.last_delta + (1-self.alpha) * delta
         # self.last_delta = delta
+        # adjusted = msg.point.y - 0.6
         error = np.arctan(msg.point.y / msg.point.x)
-        delta = self.kp * error + self.kd * (error - self.last_error)
-        delta = np.clip(delta, -np.pi/100, np.pi/100)
+        # error = np.clip(error, -np.pi/30, np.pi/30)
+        delta = self.kp * error + self.kd * (error - self.last_error) + 0.015
+        # delta = np.clip(delta, -np.pi/100, np.pi/100)
         self.last_error = error
-        if (np.abs(msg.point.y) > 0.4):
+        self.last_delta = delta
+        if (np.abs(msg.point.y) > 0.5):
             delta = 0.0
         cmd.drive.steering_angle = delta
+        # self.get_logger().info(str(delta))
 
         self.drive_cmd = cmd
 

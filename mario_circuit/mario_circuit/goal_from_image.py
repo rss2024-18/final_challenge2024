@@ -53,6 +53,8 @@ def cd_color_segmentation(img, height = 360, width = 640, template = None, last 
     if len(white_indices[0]) > 0:
         if len(white_indices[0]) > 135 and last is not None:
             return (last[0], last[1], thresholded)
+        elif len(white_indices[0]) < 75 and last is not None:
+            return (640-width_low-int(np.nanmean(white_indices[0])), last[1], thresholded)
         try:
             average_x = width_low + int(np.nanmean(white_indices[0]))
         except:
