@@ -248,7 +248,7 @@ class Map():
     """
     2D map discretization Abstract Data Type
     """
-    def __init__(self, msg, node, lanes, forbidden, left, right, u_turns, left_zone, right_zone) -> None:
+    def __init__(self, msg, node, lanes, forbidden, left, right, u_turns, left_zone, right_zone, other_zones) -> None:
         self.node = node
         self.height = msg.info.height #1300
         self.width = msg.info.width #1730
@@ -269,6 +269,7 @@ class Map():
         self.u_turns = u_turns
         self.left_zone = left_zone
         self.right_zone = right_zone
+        self.other_zones = other_zones
 
     def dilate_map(self, data):
         struct_element = np.ones((11, 11))
@@ -364,6 +365,17 @@ class Map():
         in_left = self.point_inside_forbidden(x, y, self.left_zone)
         self.node.get_logger().info("In right is: " + str(in_right) + "and in left is: " + str(in_left))
         return (in_left, in_right)
+    
+    def other_zone_identifier(self, x, y):
+        if self.point_inside_forbidden(x, y, self.other_zones[0]):
+            return 0
+        elif self.point_inside_forbidden(x, y, self.other_zones[1]):
+            return 1
+        elif self.point_inside_forbidden(x, y, self.other_zones[2]):
+            return 2
+        elif self.point_inside_forbidden(x, y, self.other_zones[3]):
+            return 3
+        return -1
 
     def closest_point_to_lanes(self, start, finish):
 
@@ -372,6 +384,9 @@ class Map():
 
         start_zone = self.zone_identifier(start[0], start[1])
         finish_zone = self.zone_identifier(finish[0], finish[1])
+
+        start_other_zone = self.other_zone_identifier(start[0], start[1])
+        finish_other_zone = self.other_zone_identifier(finish[0], finish[1])
 
         if start_zone[0]:
             shortest_start = self.closest_line_segment(start, self.left_traj)
@@ -388,13 +403,70 @@ class Map():
             index2 = self.right_traj.index(shortest_finish[0][0])
         
         if start_zone[0] and finish_zone[0]:
+            if start_other_zone > finish_other_zone:
+                return [start] + self.left_traj[index1:] + self.u_turns[0][0] + self.right_traj + self.u_turns[1][0] + self.left_traj[:index2] + [finish]
             return [start] + self.left_traj[index1:index2 + 1] + [finish]
-        elif start_zone[0] and finish_zone[1]:
-            return [start] + self.left_traj[index1:] + self.u_turns[0] + self.right_traj[:index2] + [finish]
-        elif start_zone[1] and finish_zone[0]:
-            return [start] + self.right_traj[index1:] + self.u_turns[1] + self.left_traj[:index2] + [finish]
-        else:
+        if start_zone[1] and finish_zone[1]:
+            if start_other_zone < finish_other_zone:
+                return [start] + self.right_traj[index1:] + self.u_turns[1][0] + self.left_traj + self.u_turns[0][0] + self.right_traj[:index2] + [finish]
             return [start] + self.right_traj[index1:index2 + 1] + [finish]
+        
+        if start_zone[0] and finish_zone[1]:
+            if start_other_zone == 0:
+                if finish_other_zone == 0:
+                    return [start] + self.left_traj[index1:8] + self.u_turns[0][1] + self.right_traj[27:index2] + [finish]
+                elif finish_other_zone == 1:
+                    return [start] + self.left_traj[index1:22] + self.u_turns[1][2] + self.right_traj[13:index2] + [finish]
+                elif finish_other_zone == 2:
+                    return [start] + self.left_traj[index1:26] + self.u_turns[1][3] + self.right_traj[8:index2] + [finish]
+                else:
+                    return [start] + self.left_traj[index1:] + self.u_turns[0][0] + self.right_traj[:index2] + [finish]
+            elif start_other_zone == 1:
+                if finish_other_zone == 0 or finish_other_zone == 1:
+                    return [start] + self.left_traj[index1:22] + self.u_turns[1][2] + self.right_traj[13:index2] + [finish]
+                elif finish_other_zone == 2:
+                    return [start] + self.left_traj[index1:26] + self.u_turns[1][3] + self.right_traj[8:index2] + [finish]
+                else:
+                    return [start] + self.left_traj[index1:] + self.u_turns[0][0] + self.right_traj[:index2] +  [finish]
+            elif start_other_zone == 2:
+                if finish_other_zone == 0 or finish_other_zone == 1 or finish_other_zone == 2:
+                    return [start] + self.left_traj[index1:26] + self.u_turns[1][3] + self.right_traj[8:index2] + [finish]
+                else:
+                    return [start] + self.left_traj[index1:] + self.u_turns[0][0] + self.right_traj[:index2] +  [finish]
+            elif start_other_zone == 3:
+                return [start] + self.left_traj[index1:] + self.u_turns[0][0] + self.right_traj[:index2] +  [finish]
+        elif start_zone[1] and finish_zone[0]:
+            if start_other_zone == 0:
+                return [start] + self.right_traj[index1:] + self.u_turns[1][0] + self.left_traj[:index2] + [finish]
+            elif start_other_zone == 1:
+                if finish_other_zone == 1 or finish_other_zone == 2 or finish_other_zone == 3:
+                    return [start] + self.right_traj[index1:26] + self.u_turns[1][1] + self.left_traj[8:index2] + [finish]
+                else:
+                    return [start] + self.right_traj[index1:] + self.u_turns[1][0] + self.left_traj[:index2] + [finish]
+            elif start_other_zone == 2:
+                if finish_other_zone == 2 or finish_other_zone == 3:
+                    return [start] + self.right_traj[index1:13] + self.u_turns[0][2] + self.left_traj[22:index2] + [finish]
+                elif finish_other_zone == 1:
+                    return [start] + self.right_traj[index1:26] + self.u_turns[1][1] + self.left_traj[8:index2] + [finish]
+                else: 
+                    return [start] + self.right_traj[index1:] + self.u_turns[1][0] + self.left_traj[:index2] + [finish]
+            elif start_other_zone == 3:
+                if finish_other_zone == 3:
+                    return [start] + self.right_traj[index1:8] + self.u_turns[0][3] + self.left_traj[26:index2] + [finish]
+                if finish_other_zone == 2:
+                    return [start] + self.right_traj[index1:13] + self.u_turns[0][2] + self.left_traj[22:index2] + [finish]
+                elif finish_other_zone == 1:
+                    return [start] + self.right_traj[index1:26] + self.u_turns[1][1] + self.left_traj[8:index2] + [finish]
+                else: 
+                    return [start] + self.right_traj[index1:] + self.u_turns[1][0] + self.left_traj[:index2] + [finish]
+
+
+        # elif start_zone[0] and finish_zone[1]:
+        #     return [start] + self.left_traj[index1:] + self.u_turns[0] + self.right_traj[:index2] + [finish]
+        # elif start_zone[1] and finish_zone[0]:
+        #     return [start] + self.right_traj[index1:] + self.u_turns[1] + self.left_traj[:index2] + [finish]
+        # else:
+        #     return [start] + self.right_traj[index1:index2 + 1] + [finish]
         
         # shortest_left_start = self.closest_line_segment(start, self.left_traj)
         # shortest_right_start = self.closest_line_segment(start, self.right_traj)
