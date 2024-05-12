@@ -1,0 +1,12 @@
+path_builder:
+  ros__parameters:
+    odom_topic: "/odom"
+    map_topic: "/map"
+    initial_pose_topic: "/initialpose"
+    drive_filter_topic: "/drive_filter"
+    drive_topic: "/drive"
+path_follower:
+  ros__parameters:
+    odom_topic: "/odom"
+    drive_filter_topic: "/drive_filter"
+    drive_topic: "/drive"
