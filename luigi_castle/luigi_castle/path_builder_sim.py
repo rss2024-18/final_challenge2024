@@ -301,11 +301,13 @@ class PathPlan(Node):
     (aka it goes through the Luigi's Basement course)"""
 
     def __init__(self):
-        super().__init__("path_builder") # TODO: change to new name
+        super().__init__("path_builder_sim") # TODO: change to new name
+        self.get_logger().info(str("HI BITCHES"))
         self.declare_parameter('odom_topic', "default")
         self.declare_parameter('map_topic', "default")
         self.declare_parameter('initial_pose_topic', "default")
         self.declare_parameter('drive_topic', "default")
+        self.declare_parameter('drive_filter_topic', "default")
 
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
@@ -313,6 +315,7 @@ class PathPlan(Node):
         self.drive_topic = self.get_parameter('drive_topic').get_parameter_value().string_value
         self.drive_filter_topic = self.get_parameter('drive_filter_topic').get_parameter_value().string_value
 
+        self.get_logger().info(self.get_parameter('map_topic').get_parameter_value().string_value)
         self.get_logger().info(str(self.map_topic))
         self.get_logger().info(str(self.initial_pose_topic))
 
@@ -394,17 +397,19 @@ class PathPlan(Node):
     def odom_cb(self, msg):
         # check if coordinates have reached self.reached[self.index]
         #if they have reached the next stop, make it tell drive command to have zero velocity
-        if self.map is not None and self.start is not None and len(self.stops)==3:
-            robot_pose = msg.pose.pose 
-            robot_point = self.map.discretization(robot_pose.position.x, robot_pose.position.y)
-            stop_point = self.map.discretization(self.stops[self.index][0], self.stops[self.index][1])
+        if self.map is not None and self.start is not None and len(self.stops)==3 and self.index<3:
+            for i in range(len(self.stops)): 
+                robot_pose = msg.pose.pose 
+                robot_point = self.map.discretization(robot_pose.position.x, robot_pose.position.y)
+                stop_point = self.map.discretization(self.stops[i][0], self.stops[i][1])
             
-                # dist = math.sqrt((robot_point[0]-stop_point[0])**2 + (robot_point[1]-stop_point[1])**2)
-            if robot_point[0]==stop_point[0] and robot_point[1]==stop_point[1]:
-            # if dist <= 2:
-                self.get_logger().info("STOP REACHED") 
-                self.index += 1
-                self.stop_time = self.get_clock().now().to_msg()
+                dist = math.sqrt((robot_point[0]-stop_point[0])**2 + (robot_point[1]-stop_point[1])**2)
+            #if robot_point[0]==stop_point[0] and robot_point[1]==stop_point[1]:
+                if dist <= 0.5:
+                    self.get_logger().info("STOP REACHED") 
+                    self.index += 1
+                    self.stop_time = self.get_clock().now().to_msg()
+                    break
         #pass
 
     def map_cb(self, msg):
@@ -487,10 +492,10 @@ class PathPlan(Node):
                 self.stop3_pub.publish(marker)
                 if self.map is not None and self.start is not None:
                     self.get_logger().info("path time BITCH")
-                    path = self.plan_path(self.start, self.stops[0], self.stops[1], self.stops[2], self.start, self.map)
+                    path = self.plan_path(self.start, self.stops[0], self.stops[1], self.stops[2], self.map)
     
 
-    def plan_path(self, start_point, stop_1, stop_2, stop_3, destination, map):
+    def plan_path(self, start_point, stop_1, stop_2, stop_3, map):
         # construct a trajectory
         # self.get_logger().info(str(self.stops[0]))
         # self.get_logger().info(str(self.stops[1]))
@@ -503,10 +508,10 @@ class PathPlan(Node):
         # print(str(path1))
         path2 = self.map.closest_point_to_lanes(self.stops[1], self.stops[2])
         # print(str(path2))
-        finalpath = self.map.closest_point_to_lanes(self.stops[2], destination)
+        finalpath = self.map.closest_point_to_lanes(self.stops[2], start_point)
         # print(str(finalpath))
 
-        path = path0 + path1[1:] + path2[1:] #+ finalpath[1:-1]
+        path = path0 + path1[1:] + path2[1:] + finalpath[1:-1]
         
         
         # add to trajectory
