@@ -17,6 +17,8 @@ import math
 import cv2
 from cv_bridge import CvBridge
 
+import time
+
 class PurePursuit(Node):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
     """
@@ -32,7 +34,7 @@ class PurePursuit(Node):
         self.drive_filter_topic = self.get_parameter('drive_filter_topic').get_parameter_value().string_value
 
         self.lookahead = 1.2  # FILL IN #
-        self.speed = 0.8  # FILL IN #
+        self.speed = 1.0 # FILL IN #
         self.wheelbase_length = 0.3  # FILL IN #
 
         self.trajectory = LineTrajectory("/planned_trajectory")
@@ -54,10 +56,6 @@ class PurePursuit(Node):
         self.debug_pub = self.create_publisher(PointStamped,
                                                "/debug/target",
                                                1)
-        # self.stoplight_sub = self.create_subscription(Bool,
-        #                                               "/stop_light",
-        #                                               self.stoplight_cb,
-        #                                               10)
 
         self.initialized_traj = False
 
@@ -73,7 +71,14 @@ class PurePursuit(Node):
         # self.stopping = False
         # self.stop_start = None
 
-        # self.stop_now = False
+        self.stop_now = False
+        self.stoplight_sub = self.create_subscription(Bool,
+                                                      "/stop_light",
+                                                      self.stoplight_cb,
+                                                      10)
+
+        self.active_braking = False
+        self.active_braking_time = None
 
         # self.ssd = StopSignDetector()
         # self.image_sub = self.create_subscription(Image,
@@ -81,38 +86,52 @@ class PurePursuit(Node):
         #                                           self.image_cb,
         #                                           10)
         # self.bridge = CvBridge()
-        # self.time_last_stop_sign = self.get_clock().now().to_msg()
-        # self.stop_sign_stop = False
+        # self.spotted_hold = False
+        # self.stop_threshold = 10000
+        self.get_logger().info("Path follower initialized")
         
     # def image_cb(self, image_msg):
+    #     if self.spotted_hold:
+    #         return
     #     image = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
     #     image = np.asarray(image[:,:])
     #     detected, bounding_box = self.ssd.predict(image)
-    #     if detected and (bounding_box[2]-bounding_box[0]) * (bounding_box[3]-bounding_box[1]):
-    #         curr_time = self.get_clock().now().to_msg()
-    #         if curr_time.sec >= self.time_last_stop_sign.sec + 10: 
-    #             self.stop_sign_stop = True
-    #             self.time_last_stop_sign = self.get_clock().now().to_msg()
+    #     if detected:
+    #         self.get_logger().info(str((bounding_box[2]-bounding_box[0]) * (bounding_box[3]-bounding_box[1])))
+    #         if ((bounding_box[2]-bounding_box[0]) * (bounding_box[3]-bounding_box[1]) > self.stop_threshold):
+    #             self.active_braking = True
+    #             self.active_braking_time = time.time()
+    #             self.spotted_hold = True
 
 
-    # def stoplight_cb(self, bool_msg):
-    #     self.stop_now = bool_msg
+    def stoplight_cb(self, bool_msg):
+        # self.get_logger().info("Bool Message: " + str(bool_msg.data))
+        self.stop_now = bool_msg.data
 
     # def receive_stop(self, marker_msg):
     #     # Marker(index, x, y)
     #     # stops array is 1-indexed
     #     self.stops[marker_msg.id] = (marker_msg.pose.position.x, marker_msg.pose.position.y)
 
-
     def pose_callback(self, odometry_msg):
-        # if self.stop_now:
-        #     command = AckermannDriveStamped()
-        #     command.header = odometry_msg.header
-        #     command.header.stamp = self.get_clock().now().to_msg()
-        #     command.drive.steering_angle = 0.0
-        #     command.drive.speed = 0.0
-        #     self.drive_filter_pub.publish(command)
-        #     return
+        if self.active_braking and time.time() - self.active_braking_time < 1.0:
+            self.get_logger().info("ACTIVE BRAKING")
+            return
+        else:
+            self.active_braking = False
+        # if self.spotted_hold and time.time() - self.active_braking_time > 5.0:
+        #     self.spotted_hold = False
+        if self.stop_now:
+            self.get_logger().info("LIGHT")
+            command = AckermannDriveStamped()
+            command.header = odometry_msg.header
+            command.header.stamp = self.get_clock().now().to_msg()
+            command.drive.steering_angle = 0.0
+            command.drive.speed = 0.0
+            self.drive_filter_pub.publish(command)
+            self.active_braking = True
+            self.active_braking_time = time.time()
+            return
         # curr_time = self.get_clock().now().to_msg()
         # if self.stop_sign_stop:
         #     if curr_time.sec <= self.time_last_stop_sign.sec + 1:
@@ -125,13 +144,14 @@ class PurePursuit(Node):
         #         return
         #     else:
         #         self.stop_sign_stop = False
-        ## early return if stopped
+        # early return if stopped
         # if self.stopping:
         #     self.get_logger().info(str(odometry_msg.header.stamp - self.stop_start))
         #     if (odometry_msg.header.stamp - self.stop_start < 5.0):
         #         return
         #     self.stopping = False
         
+        # self.get_logger().info("B: " + str(self.initialized_traj))
         if not self.initialized_traj: 
             return
         
@@ -179,7 +199,8 @@ class PurePursuit(Node):
             # self.get_logger().info(str(np.linalg.norm(ends[i] - robot_point)))
             self.lookahead = np.sqrt(np.linalg.norm(ends[i] - robot_point)) + 0.2 
             break
-
+        
+        # self.get_logger().info("C: " + str(found))
         if not found:
             command = AckermannDriveStamped()
             command.header = odometry_msg.header
@@ -239,6 +260,7 @@ class PurePursuit(Node):
         
         
         # send command
+        # self.get_logger().info("D: " + str((self.speed, delta)))
         command = AckermannDriveStamped()
         command.header = odometry_msg.header
         command.header.stamp = self.get_clock().now().to_msg()

@@ -414,18 +414,18 @@ class Map():
         if start_zone[0] and finish_zone[1]:
             if start_other_zone == 0:
                 if finish_other_zone == 2 or finish_other_zone == 0 or finish_other_zone == 1:
-                    return [start] + self.left_traj[index1:26] + self.u_turns[1][3] + self.right_traj[8:index2] + [finish]
+                    return [start] + self.left_traj[index1:25] + self.u_turns[1][3] + self.right_traj[12:index2] + [finish]
                 else:
                     return [start] + self.left_traj[index1:] + self.u_turns[0][0] + self.right_traj[:index2] + [finish]
             if start_other_zone == 1:
 
                 if finish_other_zone == 2 or finish_other_zone == 0 or finish_other_zone == 1:
-                    return [start] + self.left_traj[index1:26] + self.u_turns[1][3] + self.right_traj[8:index2] + [finish]
+                    return [start] + self.left_traj[index1:25] + self.u_turns[1][3] + self.right_traj[12:index2] + [finish]
                 else:
                     return [start] + self.left_traj[index1:] + self.u_turns[0][0] + self.right_traj[:index2] +  [finish]
             elif start_other_zone == 2:
                 if finish_other_zone == 0 or finish_other_zone == 1 or finish_other_zone == 2:
-                    return [start] + self.left_traj[index1:26] + self.u_turns[1][3] + self.right_traj[8:index2] + [finish]
+                    return [start] + self.left_traj[index1:25] + self.u_turns[1][3] + self.right_traj[12:index2] + [finish]
                 else:
                     return [start] + self.left_traj[index1:] + self.u_turns[0][0] + self.right_traj[:index2] +  [finish]
             elif start_other_zone == 3:

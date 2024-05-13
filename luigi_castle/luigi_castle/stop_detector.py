@@ -14,6 +14,8 @@ from vs_msgs.msg import ConeLocation, ConeLocationPixel
 from std_msgs.msg import Bool
 from nav_msgs.msg import Odometry
 
+import time
+
 
 class SignDetector(Node):
     def __init__(self):
@@ -25,17 +27,21 @@ class SignDetector(Node):
         self.drive_sub = self.create_subscription(Odometry, "/pf/pose/odom", self.odom_callback, 1)
         self.bridge = CvBridge()
         self.stoplight_region = False
-        self.range = 3
+        self.range = 2.0
         self.stoplight_1 = (-10.57, 16.17)
         self.stoplight_2 = (-31.64, 34.09)
         self.stoplight_3 = (-54.59, 24.50)
 
 
         self.max_light_size = 800
+        self.ignore_threshold = 50
         self.x_pixels = 100
         self.buffer = 5
 
-        self.debug_pub = self.create_publisher(Image, "/debug", 1)
+        # self.debug_pub = self.create_publisher(Image, "/debug", 1)
+        # self.debug_pub1 = self.create_publisher(Image, "/debug1", 1)
+        # self.debug_pub2 = self.create_publisher(Image, "/debug2", 1)
+        # self.debug_pub3 = self.create_publisher(Image, "/debug3", 1)
         
         # timer_period = 2.0 #seconds
         # self.image = cv2.imread('/home/racecar/racecar_ws/src/final_challenge2024/media/download-7.jpg')
@@ -54,7 +60,6 @@ class SignDetector(Node):
 
         if dist_1 < self.range or dist_2 < self.range or dist_3 < self.range:
             self.stoplight_region = True
-            self.get_logger().info("in range")
         else:
             self.stoplight_region = False
 
@@ -71,10 +76,11 @@ class SignDetector(Node):
         stop_image = False
         stop_bb = None
         # self.stoplight_region = True
-        self.get_logger().info(str(self.stoplight_region))
+        self.curr_time = None
+        # self.get_logger().info(str(self.stoplight_region))
         if self.stoplight_region:
-            self.get_logger().info("calling")
-            redlight, redlight_c = self.stoplight_detector(image, stop_bb)
+            self.get_logger().info("In Range")
+            redlight = self.stoplight_detector(image, stop_bb)
         else:
             redlight = False
 
@@ -89,6 +95,7 @@ class SignDetector(Node):
         else:
             light.data = False
         # self.get_logger().info("here")
+        # self.get_logger().info(str(redlight))
         self.stop_light_pub.publish(light)
 
         # stop = Point()
@@ -105,74 +112,84 @@ class SignDetector(Node):
  
 
     def stoplight_detector(self, image, stop_bb = None):
-        self.get_logger().info("here")
-        image[:self.x_pixels, :] = 0  # Set all channels to 0 (black)
-        image[360-self.x_pixels:, :] = 0  # Set all channels to 0 (black)
-        hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        redlight = False
+        # self.get_logger().info("here")
+        image[:self.x_pixels+20, :] = 0  # Set all channels to 0 (black)
+        image[360-self.x_pixels-40:, :] = 0  # Set all channels to 0 (black)
+        image[:, 320:] = 0
+        hsv_image = cv2.cvtColor(cv2.bitwise_not(image), cv2.COLOR_BGR2HSV)
 
         #threshold image
-        lower_red = (0, 100, 200)
-        upper_red = (25, 255, 255)
+        # lower_red = (0, 20, 200)
+        # upper_red = (15, 255, 255)
+        lower_cyan = (85, 100, 200)
+        upper_cyan = (95, 255, 255)
 
-        mask = cv2.inRange(hsv_image, lower_red, upper_red)
+        mask = cv2.inRange(hsv_image, lower_cyan, upper_cyan)
         # result = cv2.bitwise_and(image, image, mask=mask)
 
-        erode_kernel = np.ones((1,1), np.uint8)
-        eroded_image = cv2.erode(mask, erode_kernel, iterations=1)
-
-        dilate_kernel = np.ones((5,5), np.uint8)
-        dilated_image = cv2.dilate(eroded_image, dilate_kernel, iterations=1) 
+        dilate_kernel = np.ones((9,9), np.uint8)
+        open_image = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, dilate_kernel, iterations = 2)
         # image_print(dilated_image, "dilated_image")
 
         # Perform closing to merge nearby white regions
-        closed_kernel = np.ones((7,7), np.uint8)
-        closed_image = cv2.morphologyEx(dilated_image, cv2.MORPH_CLOSE, closed_kernel, iterations = 4)
+        closed_image = cv2.morphologyEx(open_image, cv2.MORPH_OPEN, np.ones((9,9)), iterations = 1)
+        
         # image_print(closed_image, "closed_image")
 
         contours, _ = cv2.findContours(closed_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
-        biggest_x = 0.0
-        biggest_y = 0.0 
-        biggest = 0.0
+        # biggest_x = 0.0
+        # biggest_y = 0.0 
+        # biggest = 0.0
+        
+        # debug_msg = self.bridge.cv2_to_imgmsg(cv2.cvtColor(open_image, cv2.COLOR_GRAY2BGR), "bgr8")
+        # debug_msg1 = self.bridge.cv2_to_imgmsg(cv2.cvtColor(closed_image, cv2.COLOR_GRAY2BGR), "bgr8")
+        # debug_msg2 = self.bridge.cv2_to_imgmsg(cv2.bitwise_not(image), "bgr8")
+        # debug_msg3 = self.bridge.cv2_to_imgmsg(cv2.bitwise_not(image), "bgr8")
+        # self.debug_pub.publish(debug_msg)
+        # self.debug_pub1.publish(debug_msg1)
+        # self.debug_pub2.publish(debug_msg2)
+        # self.debug_pub3.publish(debug_msg3)
 
-        debug_msg = self.bridge.cv2_to_imgmsg(cv2.cvtColor(closed_image, cv2.COLOR_GRAY2BGR), "bgr8")
-        self.debug_pub.publish(debug_msg)
+        if len(contours) == 0:
+            return False
+        return max([cv2.contourArea(contour) for contour in contours]) > self.ignore_threshold
+        
 
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            # self.get_logger().info(str(area))
+        # for contour in contours:
+        #     area = cv2.contourArea(contour)
+        #     self.get_logger().info(str(area))
 
-            if area < self.max_light_size:
-                # self.get_logger().info("area greater")
-                #fit bounding rectangle
-                x, y, w, h = cv2.boundingRect(contour)
+        #     if area < self.max_light_size:
+        #         # self.get_logger().info("area greater")
+        #         #fit bounding rectangle
+        #         x, y, w, h = cv2.boundingRect(contour)
 
-                if stop_bb is not None:
-                    self.get_logger().info("stop_bb")
-                    exclude_x, exclude_y, exclude_w, exclude_h = stop_bb
-                    exclude_x -= self.buffer
-                    exclude_y -= self.buffer
-                    exclude_w += 2 * self.buffer
-                    exclude_h += 2 * self.buffer
-                    # Check if the contour is within the excluded bounding box
-                    if (x >= exclude_x and y >= exclude_y and x + w <= exclude_x + exclude_w and y + h <= exclude_y + exclude_h):
-                        continue 
+        #         if stop_bb is not None:
+        #             # self.get_logger().info("stop_bb")
+        #             exclude_x, exclude_y, exclude_w, exclude_h = stop_bb
+        #             exclude_x -= self.buffer
+        #             exclude_y -= self.buffer
+        #             exclude_w += 2 * self.buffer
+        #             exclude_h += 2 * self.buffer
+        #             # Check if the contour is within the excluded bounding box
+        #             if (x >= exclude_x and y >= exclude_y and x + w <= exclude_x + exclude_w and y + h <= exclude_y + exclude_h):
+        #                 continue 
                 
-                #check size of this red object
-                if area > biggest:
-                    redlight = True
-                    center_x = x + w // 2
-                    center_y = y + h // 2  
-                    biggest = area
-                    biggest_x = center_x
-                    biggest_y = center_y
-        if biggest > 0.0:            
-            image_with_rectangle = cv2.rectangle(image.copy(), (center_x-w//2, center_y+h//2), (center_x+w//2, center_y-h//2), (0, 255, 0), 2)
-            # image_print(image_with_rectangle, "image_w_rectangle")
-            return redlight, (biggest_x, biggest_y)
-        #nothing red found return none 
-        return redlight, (None, None)
+        #         #check size of this red object
+        #         if area > biggest:
+        #             redlight = True
+        #             center_x = x + w // 2
+        #             center_y = y + h // 2  
+        #             biggest = area
+        #             biggest_x = center_x
+        #             biggest_y = center_y
+        # if biggest > 0.0:            
+        #     image_with_rectangle = cv2.rectangle(image.copy(), (center_x-w//2, center_y+h//2), (center_x+w//2, center_y-h//2), (0, 255, 0), 2)
+        #     # image_print(image_with_rectangle, "image_w_rectangle")
+        #     return redlight, (biggest_x, biggest_y)
+        # #nothing red found return none 
+        # return redlight, (None, None)
     
 def image_print(img, label):
     cv2.namedWindow(label, cv2.WINDOW_AUTOSIZE)

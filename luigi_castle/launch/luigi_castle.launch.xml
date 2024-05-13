@@ -10,8 +10,8 @@
     <node pkg="localization" exec="particle_filter" name="particle_filter" output="screen">
         <param from="$(find-pkg-share luigi_castle)/config/pf_config.yaml"/>
     </node>
-    <node pkg="safety_controller" name="safety_controller" exec="safety_controller" output="screen">
-    </node>
+    <!-- <node pkg="safety_controller" name="safety_controller" exec="safety_controller" output="screen">
+    </node> -->
     <node pkg="luigi_castle" name="stop_detector" exec="stop_detector" output="screen">
     </node>
     
